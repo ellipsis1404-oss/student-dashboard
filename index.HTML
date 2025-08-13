@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Progress Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            background-image: linear-gradient(to top, #e2e8f0, #f3f4f6);
+        }
+        .container {
+            max-width: 90%;
+            margin: auto;
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 1.25rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            padding: 1.5rem;
+            transition: transform 0.2s ease-in-out;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            text-align: left;
+            padding: 0.75rem;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        th {
+            background-color: #f9fafb;
+            font-weight: 600;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        .progress-bar-container {
+            background-color: #e5e7eb;
+            height: 0.75rem;
+            border-radius: 9999px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            border-radius: 9999px;
+            transition: width 0.5s ease-in-out;
+        }
+        .text-score-low { color: #ef4444; }
+        .text-score-medium { color: #f59e0b; }
+        .text-score-high { color: #10b981; }
+        .btn-primary {
+            background-image: linear-gradient(to right, #4f46e5, #8b5cf6);
+            color: white;
+            font-weight: 500;
+            border-radius: 0.75rem;
+            padding: 0.75rem 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s ease-in-out;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .prose p {
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+    </style>
+</head>
+<body class="p-6 md:p-10">
+    <div class="container space-y-12">
+        <header class="text-center space-y-2">
+            <h1 class="text-4xl md:text-5xl font-bold text-gray-900">My Progress Dashboard</h1>
+            <p class="text-lg text-gray-600">Track your performance and mastery over time.</p>
+        </header>
+
+        <!-- Student Selector and Overall Summary -->
+        <div class="card space-y-4">
+            <div class="flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0 sm:space-x-4">
+                <div class="w-full sm:w-1/2">
+                    <label for="student-selector" class="block text-sm font-medium text-gray-700 mb-1">Select your name:</label>
+                    <select id="student-selector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md shadow-sm">
+                        <option value="">Loading students...</option>
+                    </select>
+                </div>
+                <div class="w-full sm:w-1/2 text-center sm:text-right">
+                    <span id="overall-score-display" class="text-5xl font-extrabold text-gray-900">--%</span>
+                    <p class="text-lg text-gray-500">Overall Average Score</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dynamic Content Area -->
+        <div id="dashboard-content" class="space-y-12">
+            <div class="text-center text-gray-500 text-lg py-16">
+                Please select your name from the dropdown to view your progress.
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Use the CSV URL you published from Google Sheets.
+        // IMPORTANT: Replace this placeholder URL with your actual published CSV URL.
+        const SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSodtI3l1qwbRQLsG5_hQY9WctHsellKA8SH4xWZ6rFz4p3IF9Ksf0iZMGQ7xOvPQ/pub?gid=1189048986&single=true&output=csv';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const studentSelector = document.getElementById('student-selector');
+            const dashboardContent = document.getElementById('dashboard-content');
+            const overallScoreDisplay = document.getElementById('overall-score-display');
+            let studentData = [];
+            let headers = [];
+
+            // Fetches and parses the CSV data from the Google Sheet
+            async function fetchData() {
+                // Check if the URL is still the placeholder
+                if (!SHEET_URL) {
+                    dashboardContent.innerHTML = `<div class="card p-4 text-center text-red-500">
+                        <p class="font-bold">Error: URL not updated.</p>
+                        <p>Please replace the placeholder URL in the JavaScript code with your actual published CSV URL from Google Sheets.</p>
+                    </div>`;
+                    return;
+                }
+                
+                try {
+                    const response = await fetch(SHEET_URL);
+                    const csvText = await response.text();
+                    
+                    // Log the raw CSV text to the console for debugging
+                    console.log('--- Raw CSV Data ---');
+                    console.log(csvText);
+
+                    const rows = csvText.trim().split('\n');
+                    headers = rows[0].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(header => header.trim().replace(/"/g, ''));
+                    
+                    // Check if a critical header is present
+                    if (!headers.includes('Student Name')) {
+                        console.error('Error: "Student Name" column not found in CSV headers.');
+                        dashboardContent.innerHTML = `<div class="card p-4 text-center text-red-500">
+                            <p class="font-bold">Error parsing data.</p>
+                            <p>The "Student Name" column could not be found. Please check your Google Sheet and ensure the column headers are exactly as expected. Check the browser console for more details.</p>
+                        </div>`;
+                        return;
+                    }
+
+                    const data = rows.slice(1).map(row => {
+                        const values = row.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(value => value.trim().replace(/"/g, ''));
+                        return headers.reduce((obj, header, index) => {
+                            obj[header] = values[index];
+                            return obj;
+                        }, {});
+                    });
+                    
+                    // Log the parsed data object to the console for debugging
+                    console.log('--- Parsed Data Objects ---');
+                    console.log(data);
+
+                    studentData = data;
+                    populateStudentSelector(data);
+
+                } catch (error) {
+                    dashboardContent.innerHTML = `<div class="card p-4 text-center text-red-500">
+                        <p class="font-bold">Error fetching data.</p>
+                        <p>Please ensure the Google Sheet is published to the web as a CSV and the URL is correct. Check the browser console for details on the error.</p>
+                    </div>`;
+                    console.error('Error fetching data:', error);
+                }
+            }
+            
+            // Populates the student dropdown with unique names
+            function populateStudentSelector(data) {
+                const uniqueStudents = [...new Set(data.map(item => item['Student Name']))].sort();
+                studentSelector.innerHTML = '<option value="">Select a student...</option>';
+                uniqueStudents.forEach(student => {
+                    const option = document.createElement('option');
+                    option.value = student;
+                    option.textContent = student;
+                    studentSelector.appendChild(option);
+                });
+            }
+
+            // Renders the dashboard for the selected student
+            function renderDashboard(selectedStudent) {
+                if (!selectedStudent) {
+                    dashboardContent.innerHTML = `<div class="text-center text-gray-500 text-lg py-16">
+                        Please select your name from the dropdown to view your progress.
+                    </div>`;
+                    overallScoreDisplay.textContent = '--%';
+                    return;
+                }
+
+                // Filter data for the selected student
+                const studentProgress = studentData.filter(item => item['Student Name'] === selectedStudent);
+                
+                // Group data by Competency and Chapter Test
+                const competencyScores = {};
+                let totalScore = 0;
+                let totalMaxScore = 0;
+
+                studentProgress.forEach(item => {
+                    const competency = item['Competency Description'];
+                    const chapter = item['Chapter Test'];
+                    const score = parseFloat(item['Score']);
+                    const maxScore = parseFloat(item['Max Score']);
+                    const competencyType = item['Competency Type'];
+
+                    if (isNaN(score) || isNaN(maxScore)) return;
+
+                    totalScore += score;
+                    totalMaxScore += maxScore;
+
+                    if (!competencyScores[competency]) {
+                        competencyScores[competency] = { scores: {}, totalScore: 0, totalMaxScore: 0, type: competencyType };
+                    }
+                    if (!competencyScores[competency].scores[chapter]) {
+                        competencyScores[competency].scores[chapter] = { score: 0, maxScore: 0 };
+                    }
+                    competencyScores[competency].scores[chapter].score += score;
+                    competencyScores[competency].scores[chapter].maxScore += maxScore;
+                    competencyScores[competency].totalScore += score;
+                    competencyScores[competency].totalMaxScore += maxScore;
+                });
+                
+                // Calculate overall score
+                const overallPercentage = totalMaxScore > 0 ? (totalScore / totalMaxScore) * 100 : 0;
+                overallScoreDisplay.textContent = `${overallPercentage.toFixed(0)}%`;
+
+                // Generate HTML for the dashboard content
+                let dashboardHtml = '';
+                
+                // Competency Progress Table
+                dashboardHtml += `
+                    <div class="card">
+                        <h2 class="text-2xl font-bold text-gray-900 mb-4">Competency Mastery</h2>
+                        <p class="text-gray-500 mb-4">Your average score for each competency across all tests.</p>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Competency</th>
+                                    <th class="w-1/4">Progress</th>
+                                    <th>Score</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                for (const competency in competencyScores) {
+                    const compTotalScore = competencyScores[competency].totalScore;
+                    const compTotalMaxScore = competencyScores[competency].totalMaxScore;
+                    const compPercentage = compTotalMaxScore > 0 ? (compTotalScore / compTotalMaxScore) * 100 : 0;
+                    
+                    let barColor = 'bg-red-500';
+                    let textColor = 'text-score-low';
+                    if (compPercentage > 70) {
+                        barColor = 'bg-green-500';
+                        textColor = 'text-score-high';
+                    } else if (compPercentage > 50) {
+                        barColor = 'bg-yellow-500';
+                        textColor = 'text-score-medium';
+                    }
+
+                    dashboardHtml += `
+                        <tr>
+                            <td>
+                                <p class="font-medium text-gray-900">${competency}</p>
+                                <p class="text-sm text-gray-500">${competencyScores[competency].type || ''}</p>
+                            </td>
+                            <td>
+                                <div class="progress-bar-container">
+                                    <div class="${barColor}" style="width: ${compPercentage}%;"></div>
+                                </div>
+                            </td>
+                            <td class="${textColor} font-semibold">${compPercentage.toFixed(0)}%</td>
+                        </tr>
+                    `;
+                }
+                
+                dashboardHtml += `</tbody></table></div>`;
+                
+                // AI Diagnosis Section
+                dashboardHtml += `
+                    <div class="card space-y-4">
+                        <h2 class="text-2xl font-bold text-gray-900">AI-Powered Progress Diagnosis</h2>
+                        <p class="text-gray-500">Get an expert analysis of your performance based on IGCSE Biology requirements.</p>
+                        <button id="diagnose-button" class="btn-primary w-full sm:w-auto">
+                            Generate Diagnosis
+                        </button>
+                        <div id="diagnosis-result" class="space-y-4">
+                            <!-- AI diagnosis will be displayed here -->
+                        </div>
+                    </div>
+                `;
+
+                // Chapter Test Scores Chart (if multiple chapters exist)
+                const chapterTests = [...new Set(studentProgress.map(item => item['Chapter Test']))].sort();
+                if (chapterTests.length > 1) {
+                    const chartId = 'progressChart';
+                    dashboardHtml += `
+                        <div class="card">
+                            <h2 class="text-2xl font-bold text-gray-900 mb-4">Performance by Chapter</h2>
+                            <p class="text-gray-500 mb-4">Track your performance in each chapter test.</p>
+                            <div class="h-80"><canvas id="${chartId}"></canvas></div>
+                        </div>
+                    `;
+                }
+
+                dashboardContent.innerHTML = dashboardHtml;
+                
+                if (chapterTests.length > 1) {
+                    createProgressChart(chapterTests, studentProgress);
+                }
+
+                document.getElementById('diagnose-button').addEventListener('click', () => {
+                    generateDiagnosisSummary(selectedStudent, competencyScores);
+                });
+            }
+
+            // Creates the Chart.js line chart for chapter progress
+            function createProgressChart(chapterTests, studentProgress) {
+                const chapterData = chapterTests.map(chapter => {
+                    const chapterItems = studentProgress.filter(item => item['Chapter Test'] === chapter);
+                    const chapterScore = chapterItems.reduce((sum, item) => sum + parseFloat(item['Score']), 0);
+                    const chapterMaxScore = chapterItems.reduce((sum, item) => sum + parseFloat(item['Max Score']), 0);
+                    return chapterMaxScore > 0 ? (chapterScore / chapterMaxScore) * 100 : 0;
+                });
+                
+                const ctx = document.getElementById('progressChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: chapterTests,
+                        datasets: [{
+                            label: 'Overall Progress',
+                            data: chapterData,
+                            borderColor: '#4f46e5',
+                            backgroundColor: 'rgba(79, 70, 229, 0.2)',
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 100,
+                                title: {
+                                    display: true,
+                                    text: 'Percentage Score'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            async function callGeminiAPI(prompt) {
+                let chatHistory = [];
+                chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+                const payload = { contents: chatHistory };
+                const apiKey = "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.candidates && result.candidates.length > 0 && result.candidates[0].content && result.candidates[0].content.parts && result.candidates[0].content.parts.length > 0) {
+                        return result.candidates[0].content.parts[0].text;
+                    } else {
+                        return null;
+                    }
+                } catch (error) {
+                    console.error('AI API request failed:', error);
+                    return null;
+                }
+            }
+
+            // Generates AI-powered diagnosis using the Gemini API
+            async function generateDiagnosisSummary(studentName, competencyScores) {
+                const diagnoseButton = document.getElementById('diagnose-button');
+                const diagnosisResult = document.getElementById('diagnosis-result');
+
+                diagnoseButton.disabled = true;
+                diagnoseButton.innerHTML = `<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg> Generating...`;
+                diagnosisResult.innerHTML = '<p class="text-center text-gray-500">Analyzing your data...</p>';
+
+                const competencyDetails = Object.keys(competencyScores).map(comp => {
+                    const totalScore = competencyScores[comp].totalScore;
+                    const totalMaxScore = competencyScores[comp].totalMaxScore;
+                    const percentage = totalMaxScore > 0 ? ((totalScore / totalMaxScore) * 100).toFixed(0) : '0';
+                    const type = competencyScores[comp].type;
+                    return `- ${comp} (${type}): ${percentage}%`;
+                }).join('\n');
+
+                const summaryPrompt = `You are an expert Cambridge IGCSE Biology tutor. You are analyzing a student's performance. The student's name is ${studentName}.
+                
+Here are their scores for each competency:
+${competencyDetails}
+
+Based on this data, provide a concise progress diagnosis summary in bullet points. The diagnosis should:
+1.  Identify 2-3 key strengths and 2-3 key areas for improvement.
+2.  Use a friendly, encouraging, and professional tone.
+3.  Do not include specific strategies, just the high-level summary.`;
+                
+                const aiText = await callGeminiAPI(summaryPrompt);
+
+                if (aiText) {
+                    diagnosisResult.innerHTML = `
+                        <div class="bg-indigo-50 p-6 rounded-lg">
+                            <div class="prose max-w-none text-gray-700">
+                                <h3 class="text-lg font-bold text-gray-900 mb-2">Overall Diagnosis</h3>
+                                ${aiText.replace(/\n/g, '<br>')}
+                            </div>
+                        </div>
+                        <button id="detailed-report-button" class="btn-primary w-full sm:w-auto mt-4">
+                            Generate Detailed Report
+                        </button>
+                    `;
+                    document.getElementById('detailed-report-button').addEventListener('click', () => {
+                        generateDetailedReport(studentName, competencyScores);
+                    });
+                } else {
+                    diagnosisResult.innerHTML = `<p class="text-center text-red-500">Failed to get a summary from the AI. Please try again.</p>`;
+                }
+                
+                diagnoseButton.disabled = false;
+                diagnoseButton.innerHTML = `Generate Diagnosis`;
+            }
+            
+            async function generateDetailedReport(studentName, competencyScores) {
+                const detailedReportButton = document.getElementById('detailed-report-button');
+                const diagnosisResult = document.getElementById('diagnosis-result');
+
+                detailedReportButton.disabled = true;
+                detailedReportButton.innerHTML = `<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg> Generating...`;
+                
+                diagnosisResult.innerHTML += `<div id="detailed-report-placeholder" class="mt-4 text-center text-gray-500">Generating detailed report...</div>`;
+
+                const competencyDetails = Object.keys(competencyScores).map(comp => {
+                    const totalScore = competencyScores[comp].totalScore;
+                    const totalMaxScore = competencyScores[comp].totalMaxScore;
+                    const percentage = totalMaxScore > 0 ? ((totalScore / totalMaxScore) * 100).toFixed(0) : '0';
+                    const type = competencyScores[comp].type;
+                    return `- ${comp} (${type}): ${percentage}%`;
+                }).join('\n');
+
+                const detailedPrompt = `You are an expert Cambridge IGCSE Biology tutor. You are analyzing a student's performance. The student's name is ${studentName}.
+                
+Here are their scores for each competency:
+${competencyDetails}
+
+Based on this data, provide a detailed progress report. The report should:
+1.  Identify key strengths and key areas for improvement.
+2.  Provide specific, actionable strategies for improvement tailored to the IGCSE Biology requirements.
+3.  Suggest at least one resource or study method for each area of improvement (e.g., flashcards, past papers, diagrams).
+4.  Maintain a friendly, encouraging, and professional tone.
+5.  Structure the response with clear headings for strengths, weaknesses, and next steps.
+6.  Use markdown for formatting.`;
+
+                const aiText = await callGeminiAPI(detailedPrompt);
+                const detailedPlaceholder = document.getElementById('detailed-report-placeholder');
+                
+                if (aiText) {
+                    detailedPlaceholder.innerHTML = `<div class="mt-4 p-6 bg-white rounded-lg border border-gray-200">
+                        <div class="prose max-w-none text-gray-700">
+                            ${aiText.replace(/\n/g, '<br>')}
+                        </div>
+                    </div>`;
+                } else {
+                    detailedPlaceholder.innerHTML = `<p class="text-center text-red-500">Failed to get a detailed report from the AI. Please try again.</p>`;
+                }
+
+                detailedReportButton.disabled = false;
+                detailedReportButton.innerHTML = `Generate Detailed Report`;
+            }
+
+            // Event listener for the student selector dropdown
+            studentSelector.addEventListener('change', (event) => {
+                const selectedStudent = event.target.value;
+                renderDashboard(selectedStudent);
+            });
+
+            // Initial data fetch
+            fetchData();
+        });
+    </script>
+</body>
+</html>
