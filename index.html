@@ -373,7 +373,7 @@
                 let chatHistory = [];
                 chatHistory.push({ role: "user", parts: [{ text: prompt }] });
                 const payload = { contents: chatHistory };
-                const apiKey = "AIzaSyDQQWn6Kl9UJzcCrUBa9urG7VA5I7XXsmA";
+                const apiKey = "";
                 const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
                 
                 try {
@@ -513,4 +513,5 @@ Based on this data, provide a detailed progress report. The report should:
     </script>
 </body>
 </html>
+
 
